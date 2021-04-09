@@ -1,3 +1,5 @@
 *.nes
 *__pycache__*
+libCuda/
+setEnv.sh
 
