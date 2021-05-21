@@ -54,7 +54,6 @@ class InvModel(tf.keras.Model):
         nFilter = 32
         inp_layer = tf.keras.Input(shape = obs.shape)
 
-
         self.conv1 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
         self.conv2 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
         self.conv3 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
@@ -70,7 +69,8 @@ class InvModel(tf.keras.Model):
         self.features_out = self.flat1(self.conv4(self.conv3(self.conv2(self.conv1(inp_layer)))))
         self.features = tf.keras.Model(inputs=[inp_layer], outputs=[self.features_out], name='Inverse Model')
 
-        self.prev_state = self.features(obs.reshape((1,)+obs.shape))
+        state = self.features(obs.reshape((1,)+obs.shape))
+        self.prevState = tf.convert_to_tensor(state, dtype=tf.float32)
 
         self.out = self.call(inp_layer)
         super(InvModel, self).__init__(inputs = inp_layer, outputs = self.out)
@@ -78,19 +78,24 @@ class InvModel(tf.keras.Model):
     def call(self, inputs, training=None, mask=None):
         # print("inputs shape: {}".format(inputs.shape))
         # print("batch shape: {}".format(self.conv1._batch_input_shape))
-        prev_state = self.prev_state
+        prev_state = self.prevState
         x = self.conv1(inputs)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
         x = self.flat1(x)       # Features output
         curr_state = x
-        print(inputs.shape)
-        x = self.concat([prev_state,curr_state])
+        x = self.concat([prev_state, curr_state])
         x = self.dense1(x)
         x = self.dense2(x)
-        self.prev_state = curr_state
+        self.auxPrevState = curr_state
+        self.auxPrevState = self.prevState
+        # self.prev_state = curr_state
+        # self.saveState(curr_state)
+        print("currState: {}".format(type(curr_state)))
+        print("X: {}".format(type(x)))
         return x
+
 
     # def train_step(self, data):
         # x,y = data
