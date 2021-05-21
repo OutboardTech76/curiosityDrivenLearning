@@ -31,6 +31,7 @@ class FwdModel(tf.keras.Model):
         self.dense2 = tf.keras.layers.Dense(288)
 
         self.out = self.call(inp_layer)
+        super(FwdModel,self).__init__(inputs = inp_layer, outputs = self.out)
 
     def call(self, inputs, training=None, mask=None):
         x = self.dense1(inputs)
@@ -97,20 +98,6 @@ class InvModel(tf.keras.Model):
         return x
 
 
-    # def train_step(self, data):
-        # x,y = data
-
-        # with tf.GradientTape() as tape:
-            # y_pred = self(x,training=True)
-            # loss = self.compiled_loss(y,y_pred, regularization_losses=self.losses)
-
-        # trainable_vars = self.trainable_variables
-        # gradients = tape.gradient(loss, trainable_vars)
-        # self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        # self.compiled_metrics.update_state(y, y_pred)
-        # return {m.name: m.result() for m in self.metrics}
-
-
     def encode_state(self, image):
         return self.features(image)
         
@@ -124,9 +111,12 @@ if __name__=="__main__":
     # ipdb.set_trace()
     obs = env.reset()
     print("Image shape: {}".format(obs.shape))
-    model = InvModel(obs, sum(MARIO_ACTION_MASK))
-    model.compile(optimizer='adam',loss='categorical_crossentropy', metrics=['accuracy'])
-    model.summary()
+    fModel = FwdModel()
+    fModel.compile(optimizer='adam',loss='categorical_crossentropy', metrics=['accuracy'])
+    fModel.summary()
+    iModel = InvModel(obs, sum(MARIO_ACTION_MASK))
+    iModel.compile(optimizer='adam',loss='categorical_crossentropy', metrics=['accuracy'])
+    iModel.summary()
     while True:
         action_taken = env.action_space.sample()
         lbl = np.array(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
@@ -139,7 +129,7 @@ if __name__=="__main__":
         
         obs = obs.reshape((1,)+obs.shape)
         lbl = lbl.reshape((1,)+lbl.shape)
-        model.fit(obs,lbl)
+        iModel.fit(obs,lbl)
 
         if DEBUG:
             break
