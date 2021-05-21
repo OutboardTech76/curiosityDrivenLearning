@@ -75,7 +75,7 @@ if __name__=="__main__":
     obs = env.reset()
     print("Image shape: {}".format(obs.shape))
     model = InvModel(obs.shape, sum(MARIO_ACTION_MASK))
-    model.compile(optimizer='adam',loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adam',loss='categorical_crossentropy', metrics=['accuracy'])
     model.summary()
     count = 0
     Xs = []
@@ -83,15 +83,21 @@ if __name__=="__main__":
         action_taken = env.action_space.sample()
         # print(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
         obs, rew, done, info = env.step(action_taken)
-        env.render()
+        # env.render()
         # test = obs.reshape(1, 224, 240, 3)
         # test = obs.reshape((1,) + obs.shape)
         obs = np.array(obs,dtype=np.float32)
         obs = obs / 255.0
-        Xs.append(obs)
+        # Xs.append(obs)
         # print("Shape input: {}, Input type: {}".format(test.shape, type(test)))
         count += 1
-
+        
+        X = [obs]
+        X = np.array(X)
+        lbl = np.array(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
+        lbl = [lbl]
+        lbl = np.array(lbl)
+        model.fit(X,lbl)
 
         if DEBUG:
             break
@@ -99,14 +105,14 @@ if __name__=="__main__":
             obs = env.reset()
             break
     env.close()
-    m_length = len(Xs)
-    for _ in range(m_length):
-        vec = np.random.random_sample(5)
-        vec = [np.around(i,decimals=0) for i in vec]
-        labels.append(vec)
+    # m_length = len(Xs)
+    # for _ in range(m_length):
+        # vec = np.random.random_sample(5)
+        # vec = [np.around(i,decimals=0) for i in vec]
+        # labels.append(vec)
     # ipdb.set_trace()
-    Xs = np.array(Xs,np.float32)
-    labels = np.array(labels)
-    print("Count: {}".format(count))
-    print("Shape: ({},{},{},{})".format(len(Xs),Xs[0].shape[0],Xs[0].shape[1],Xs[0].shape[2]))
-    model.fit(Xs,labels,epochs=20, batch_size=8)
+    # Xs = np.array(Xs,np.float32)
+    # labels = np.array(labels)
+    # print("Count: {}".format(count))
+    # print("Shape: ({},{},{},{})".format(len(Xs),Xs[0].shape[0],Xs[0].shape[1],Xs[0].shape[2]))
+    # model.fit(Xs,labels,epochs=20, batch_size=8)
