@@ -92,7 +92,7 @@ class InvModel(tf.keras.Model):
             loss = self.compiled_loss(y,y_pred, regularization_losses=self.losses)
 
         trainable_vars = self.trainable_variables
-        gradients = tape.gradients(loss, trainable_vars)
+        gradients = tape.gradient(loss, trainable_vars)
         self.optimizer.apply_gradients(zip(gradients, trainable_vars))
         self.compiled_metrics.update_state(y, y_pred)
         return {m.name: m.result() for m in self.metrics}
@@ -108,7 +108,7 @@ class InvModel(tf.keras.Model):
 if __name__=="__main__":
 
     env = retro.make(game="SuperMarioBros-Nes")
-    ipdb.set_trace()
+    # ipdb.set_trace()
     obs = env.reset()
     print("Image shape: {}".format(obs.shape))
     model = InvModel(obs.shape, sum(MARIO_ACTION_MASK))
