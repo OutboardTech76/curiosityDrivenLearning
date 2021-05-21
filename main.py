@@ -46,13 +46,14 @@ class InvModel(tf.keras.Model):
     Activation ELU.
     """
 
-    def __init__(self, img_shape, n_outputs):
+    def __init__(self, obs, n_outputs):
         super(InvModel, self).__init__()
         kernel = (3, 3)
         padding = 1
         stride = 2
         nFilter = 32
-        inp_layer = tf.keras.Input(shape = img_shape)
+        inp_layer = tf.keras.Input(shape = obs.shape)
+
 
         self.conv1 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
         self.conv2 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
@@ -61,11 +62,15 @@ class InvModel(tf.keras.Model):
 
         self.flat1 = tf.keras.layers.Flatten()
 
+        self.concat = tf.keras.layers.Concatenate(axis=1)
+
         self.dense1 = tf.keras.layers.Dense(256,activation='elu')
         self.dense2 = tf.keras.layers.Dense(n_outputs,activation='softmax')
 
         self.features_out = self.flat1(self.conv4(self.conv3(self.conv2(self.conv1(inp_layer)))))
         self.features = tf.keras.Model(inputs=[inp_layer], outputs=[self.features_out], name='Inverse Model')
+
+        self.prev_state = self.features(obs.reshape((1,)+obs.shape))
 
         self.out = self.call(inp_layer)
         super(InvModel, self).__init__(inputs = inp_layer, outputs = self.out)
@@ -73,29 +78,32 @@ class InvModel(tf.keras.Model):
     def call(self, inputs, training=None, mask=None):
         # print("inputs shape: {}".format(inputs.shape))
         # print("batch shape: {}".format(self.conv1._batch_input_shape))
+        prev_state = self.prev_state
         x = self.conv1(inputs)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
-        x = self.flat1(x)
+        x = self.flat1(x)       # Features output
+        curr_state = x
+        print(inputs.shape)
+        x = self.concat([prev_state,curr_state])
         x = self.dense1(x)
         x = self.dense2(x)
-        print("call called")
+        self.prev_state = curr_state
         return x
 
-    def train_step(self, data):
-        print("train_step called")
-        x,y = data
+    # def train_step(self, data):
+        # x,y = data
 
-        with tf.GradientTape() as tape:
-            y_pred = self(x,training=True)
-            loss = self.compiled_loss(y,y_pred, regularization_losses=self.losses)
+        # with tf.GradientTape() as tape:
+            # y_pred = self(x,training=True)
+            # loss = self.compiled_loss(y,y_pred, regularization_losses=self.losses)
 
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        self.compiled_metrics.update_state(y, y_pred)
-        return {m.name: m.result() for m in self.metrics}
+        # trainable_vars = self.trainable_variables
+        # gradients = tape.gradient(loss, trainable_vars)
+        # self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # self.compiled_metrics.update_state(y, y_pred)
+        # return {m.name: m.result() for m in self.metrics}
 
 
     def encode_state(self, image):
@@ -111,7 +119,7 @@ if __name__=="__main__":
     # ipdb.set_trace()
     obs = env.reset()
     print("Image shape: {}".format(obs.shape))
-    model = InvModel(obs.shape, sum(MARIO_ACTION_MASK))
+    model = InvModel(obs, sum(MARIO_ACTION_MASK))
     model.compile(optimizer='adam',loss='categorical_crossentropy', metrics=['accuracy'])
     model.summary()
     while True:
