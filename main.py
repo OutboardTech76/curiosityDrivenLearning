@@ -8,6 +8,7 @@ import numpy as np
 import ipdb
 
 DEBUG = False
+DEBUG = True
 
 ModelCNN = tf.keras.Model
 
@@ -20,6 +21,21 @@ ModelCNN = tf.keras.Model
 
 MARIO_ACTION_MASK =[1,0,0,0,0,1,1,1,1]
 
+class FwdModel(tf.keras.Model):
+    def __init__(self):
+        super(FwdModel, self).__init__()
+
+        inp_layer = tf.keras.Input(shape = 5)
+
+        self.dense1 = tf.keras.layers.Dense(256)
+        self.dense2 = tf.keras.layers.Dense(288)
+
+        self.out = self.call(inp_layer)
+
+    def call(self, inputs, training=None, mask=None):
+        x = self.dense1(inputs)
+        x = self.dense2(x)
+        return x
 
 class InvModel(tf.keras.Model):
     """
@@ -44,13 +60,15 @@ class InvModel(tf.keras.Model):
         self.conv4 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
 
         self.flat1 = tf.keras.layers.Flatten()
+
         self.dense1 = tf.keras.layers.Dense(256,activation='elu')
         self.dense2 = tf.keras.layers.Dense(n_outputs,activation='softmax')
 
-        self._outputs = None
+        self.features_out = self.flat1(self.conv4(self.conv3(self.conv2(self.conv1(inp_layer)))))
+        self.features = tf.keras.Model(inputs=[inp_layer], outputs=[self.features_out], name='Inverse Model')
 
         self.out = self.call(inp_layer)
-        super().__init__(inputs = inp_layer, outputs = self.out)
+        super(InvModel, self).__init__(inputs = inp_layer, outputs = self.out)
 
     def call(self, inputs, training=None, mask=None):
         # print("inputs shape: {}".format(inputs.shape))
@@ -62,42 +80,53 @@ class InvModel(tf.keras.Model):
         x = self.flat1(x)
         x = self.dense1(x)
         x = self.dense2(x)
+        print("call called")
         return x
+
+    def train_step(self, data):
+        print("train_step called")
+        x,y = data
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x,training=True)
+            loss = self.compiled_loss(y,y_pred, regularization_losses=self.losses)
+
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradients(loss, trainable_vars)
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        self.compiled_metrics.update_state(y, y_pred)
+        return {m.name: m.result() for m in self.metrics}
+
+
+    def encode_state(self, image):
+        return self.features(image)
         
 
-
+    
 
 
 if __name__=="__main__":
 
-    labels = []
     env = retro.make(game="SuperMarioBros-Nes")
+    ipdb.set_trace()
     obs = env.reset()
     print("Image shape: {}".format(obs.shape))
     model = InvModel(obs.shape, sum(MARIO_ACTION_MASK))
     model.compile(optimizer='adam',loss='categorical_crossentropy', metrics=['accuracy'])
     model.summary()
-    count = 0
-    Xs = []
     while True:
         action_taken = env.action_space.sample()
-        # print(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
+        lbl = np.array(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
         obs, rew, done, info = env.step(action_taken)
+
         # env.render()
-        # test = obs.reshape(1, 224, 240, 3)
-        # test = obs.reshape((1,) + obs.shape)
+
         obs = np.array(obs,dtype=np.float32)
         obs = obs / 255.0
-        # Xs.append(obs)
-        # print("Shape input: {}, Input type: {}".format(test.shape, type(test)))
-        count += 1
         
-        X = [obs]
-        X = np.array(X)
-        lbl = np.array(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
-        lbl = [lbl]
-        lbl = np.array(lbl)
-        model.fit(X,lbl)
+        obs = obs.reshape((1,)+obs.shape)
+        lbl = lbl.reshape((1,)+lbl.shape)
+        model.fit(obs,lbl)
 
         if DEBUG:
             break
@@ -105,14 +134,3 @@ if __name__=="__main__":
             obs = env.reset()
             break
     env.close()
-    # m_length = len(Xs)
-    # for _ in range(m_length):
-        # vec = np.random.random_sample(5)
-        # vec = [np.around(i,decimals=0) for i in vec]
-        # labels.append(vec)
-    # ipdb.set_trace()
-    # Xs = np.array(Xs,np.float32)
-    # labels = np.array(labels)
-    # print("Count: {}".format(count))
-    # print("Shape: ({},{},{},{})".format(len(Xs),Xs[0].shape[0],Xs[0].shape[1],Xs[0].shape[2]))
-    # model.fit(Xs,labels,epochs=20, batch_size=8)
