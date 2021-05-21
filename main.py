@@ -5,6 +5,9 @@ import retro
 from utils import action_helper as ah
 import tensorflow as tf
 import numpy as np
+import ipdb
+
+DEBUG = False
 
 ModelCNN = tf.keras.Model
 
@@ -27,30 +30,39 @@ class InvModel(tf.keras.Model):
     Activation ELU.
     """
 
-    def __init__(self):
+    def __init__(self, img_shape, n_outputs):
         super(InvModel, self).__init__()
         kernel = (3, 3)
         padding = 1
         stride = 2
         nFilter = 32
-        # self.conv1 = tf.keras.layers.Conv2D(32, (3, 3), strides=(1,1), padding='same', activation='relu', input_shape=(224,240,3))
-        # self.conv2 = tf.keras.layers.Conv2D(32, (3, 3), strides=(1,1), padding='same', activation='relu')
-        # self.conv3 = tf.keras.layers.Conv2D(32, (3, 3), strides=(1,1), padding='same', activation='relu')
-        # self.conv4 = tf.keras.layers.Conv2D(32, (3, 3), strides=(1,1), padding='same', activation='relu')
-        self.dense1 = tf.keras.layers.Dense(4,activation='relu')
-        self.dense2 = tf.keras.layers.Dense(4,activation='relu')
-        # self.conv1 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu', input_shape=(224, 240, 3))
-        # self.conv2 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
-        # self.conv3 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
-        # self.conv4 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
+        inp_layer = tf.keras.Input(shape = img_shape)
 
-    def call(self, inputs):
-        print("inputs shape: {}".format(inputs.shape))
+        self.conv1 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
+        self.conv2 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
+        self.conv3 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
+        self.conv4 = tf.keras.layers.Conv2D(nFilter, kernel, strides=stride, padding='same', activation='elu')
+
+        self.flat1 = tf.keras.layers.Flatten()
+        self.dense1 = tf.keras.layers.Dense(256,activation='elu')
+        self.dense2 = tf.keras.layers.Dense(n_outputs,activation='softmax')
+
+        self._outputs = None
+
+        self.out = self.call(inp_layer)
+        super().__init__(inputs = inp_layer, outputs = self.out)
+
+    def call(self, inputs, training=None, mask=None):
+        # print("inputs shape: {}".format(inputs.shape))
         # print("batch shape: {}".format(self.conv1._batch_input_shape))
-        # x = self.conv1(inputs)
-        x = self.dense1(inputs)
-        return self.dense2(x)
-        # return self.conv2(x)
+        x = self.conv1(inputs)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.flat1(x)
+        x = self.dense1(x)
+        x = self.dense2(x)
+        return x
         
 
 
@@ -58,25 +70,43 @@ class InvModel(tf.keras.Model):
 
 if __name__=="__main__":
 
+    labels = []
     env = retro.make(game="SuperMarioBros-Nes")
     obs = env.reset()
     print("Image shape: {}".format(obs.shape))
-    model = InvModel()
+    model = InvModel(obs.shape, sum(MARIO_ACTION_MASK))
+    model.compile(optimizer='adam',loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.summary()
+    count = 0
+    Xs = []
     while True:
         action_taken = env.action_space.sample()
         # print(ah.full_action_2_partial_action(action_taken,MARIO_ACTION_MASK))
         obs, rew, done, info = env.step(action_taken)
         env.render()
         # test = obs.reshape(1, 224, 240, 3)
-        test = obs.reshape((1,) + obs.shape)
-        
-        print("Shape input: {}, Input type: {}".format(test.shape, type(test)))
+        # test = obs.reshape((1,) + obs.shape)
+        obs = np.array(obs,dtype=np.float32)
+        obs = obs / 255.0
+        Xs.append(obs)
+        # print("Shape input: {}, Input type: {}".format(test.shape, type(test)))
+        count += 1
 
-        model.call(test)
-        model.compile(optimizer='adam',loss='sparse_categorical_crossentropy')
-        model.summary()
 
+        if DEBUG:
+            break
         if done:
             obs = env.reset()
             break
     env.close()
+    m_length = len(Xs)
+    for _ in range(m_length):
+        vec = np.random.random_sample(5)
+        vec = [np.around(i,decimals=0) for i in vec]
+        labels.append(vec)
+    # ipdb.set_trace()
+    Xs = np.array(Xs,np.float32)
+    labels = np.array(labels)
+    print("Count: {}".format(count))
+    print("Shape: ({},{},{},{})".format(len(Xs),Xs[0].shape[0],Xs[0].shape[1],Xs[0].shape[2]))
+    model.fit(Xs,labels,epochs=20, batch_size=8)
